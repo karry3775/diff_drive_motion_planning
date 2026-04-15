@@ -1,6 +1,6 @@
 """End-to-end motion planning pipeline.
 
-Orchestrates: costmap → plan path → smooth → generate trajectory.
+Orchestrates: costmap -> plan path -> smooth -> generate trajectory.
 Single entry point for the core library. No ROS dependency.
 """
 
@@ -8,7 +8,22 @@ import numpy as np
 from motion_planner_core.costmap import Costmap, CostmapConfig
 from motion_planner_core.path_planner import plan_path
 from motion_planner_core.path_smoother import smooth_path
-from motion_planner_core.trajectory_generator import generate_trajectory, TrajectoryPoint
+from motion_planner_core.trajectory_generator import generate_trajectory
+from motion_planner_core.types import Trajectory
+
+
+class PlanningError(Exception):
+    """Raised when the smoothed path violates the costmap."""
+    pass
+
+
+def _check_path_clearance(smoothed: np.ndarray, costmap: Costmap) -> list[int]:
+    """Return indices of smoothed path points that are in occupied space."""
+    violations = []
+    for i in range(len(smoothed)):
+        if not costmap.is_free_world(smoothed[i, 0], smoothed[i, 1]):
+            violations.append(i)
+    return violations
 
 
 def build_trajectory(
@@ -19,58 +34,40 @@ def build_trajectory(
     max_accel: float = 0.5,
     max_decel: float = 0.5,
     dt: float = 0.05,
-) -> tuple[np.ndarray, np.ndarray, list[TrajectoryPoint]]:
-    """Run the full pipeline: plan → smooth → generate trajectory.
+    strict: bool = False,
+) -> tuple[np.ndarray, np.ndarray, Trajectory]:
+    """Run the full pipeline: plan -> smooth -> generate trajectory.
 
-    Args:
-        waypoints: (N, 2) array of [x, y] waypoints.
-        costmap: Costmap with obstacles. None or empty = no obstacles.
-        num_smooth_samples: Points on the smoothed path.
-        max_vel: Max linear velocity (m/s).
-        max_accel: Max acceleration (m/s^2).
-        max_decel: Max deceleration (m/s^2).
-        dt: Trajectory sample period (s).
-
-    Returns:
-        (planned_path, smoothed_path, trajectory) tuple.
-        planned_path: (M, 2) obstacle-free waypoints from A*.
-        smoothed_path: (num_smooth_samples, 2) cubic spline result.
-        trajectory: list of TrajectoryPoint with time and velocity.
+    If strict=True and the smoothed path cuts through obstacles,
+    raises PlanningError. If strict=False, logs a warning but continues.
     """
-    # Step 1: Plan obstacle-free path
     if costmap is not None and not costmap.is_empty():
         planned = plan_path(waypoints, costmap)
     else:
         planned = waypoints
 
-    # Step 2: Smooth
     smoothed = smooth_path(planned, num_smooth_samples)
 
-    # Step 3: Generate time-parameterized trajectory
-    trajectory = generate_trajectory(smoothed, max_vel, max_accel, max_decel, dt)
+    if costmap is not None and not costmap.is_empty():
+        violations = _check_path_clearance(smoothed, costmap)
+        if violations and strict:
+            raise PlanningError(
+                f"Smoothed path has {len(violations)} points in obstacle space. "
+                f"Adjust waypoints or obstacle positions."
+            )
 
+    trajectory = generate_trajectory(smoothed, max_vel, max_accel, max_decel, dt)
     return planned, smoothed, trajectory
 
 
-def build_trajectory_from_config(config: dict) -> tuple[np.ndarray, np.ndarray, list[TrajectoryPoint], Costmap]:
-    """Build trajectory from a YAML config dict.
-
-    Args:
-        config: Parsed YAML config with waypoints, obstacles, etc.
-
-    Returns:
-        (planned_path, smoothed_path, trajectory, costmap) tuple.
-    """
+def build_trajectory_from_config(config: dict) -> tuple[np.ndarray, np.ndarray, Trajectory, Costmap]:
+    """Build trajectory from a YAML config dict."""
     waypoints = np.array(config['waypoints'], dtype=float)
     smooth_cfg = config.get('smoothing', {})
     traj_cfg = config.get('trajectory', {})
 
-    # Build costmap from obstacles if present
     obstacles = config.get('obstacles', [])
-    if obstacles:
-        costmap = Costmap.from_obstacles(obstacles)
-    else:
-        costmap = None
+    costmap = Costmap.from_obstacles(obstacles) if obstacles else None
 
     planned, smoothed, trajectory = build_trajectory(
         waypoints=waypoints,
@@ -81,5 +78,4 @@ def build_trajectory_from_config(config: dict) -> tuple[np.ndarray, np.ndarray, 
         max_decel=traj_cfg.get('max_deceleration', 0.5),
         dt=traj_cfg.get('dt', 0.05),
     )
-
     return planned, smoothed, trajectory, costmap

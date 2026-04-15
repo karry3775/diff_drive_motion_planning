@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: motion_planner_core
+Version: 0.1.0
+Summary: Pure Python motion planning library: path planning, smoothing, trajectory generation, tracking
+License: MIT
+Requires-Python: >=3.10
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: pyyaml
+Requires-Dist: matplotlib
+Dynamic: license
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

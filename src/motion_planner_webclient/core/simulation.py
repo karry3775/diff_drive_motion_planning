@@ -1,6 +1,6 @@
 """Standalone 2D simulation of the full pipeline.
 
-Runs costmap → path planning → smoothing → trajectory generation → pure pursuit
+Runs costmap → path planning → smoothing → trajectory generation → controller
 in a kinematic simulation. Produces matplotlib plots. No ROS2 required.
 
 Usage:
@@ -16,28 +16,17 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from motion_planner_core.pipeline import build_trajectory_from_config
-from motion_planner_core.trajectory_generator import trajectory_to_arrays
-from motion_planner_core.pure_pursuit import PurePursuitController, RobotState
+from motion_planner_core.controller import create_controller
+from motion_planner_core.types import RobotState
 from motion_planner_core.path_smoother import compute_path_curvature
 
 
 def simulate(config: dict) -> dict:
-    """Run the full pipeline and return results for plotting."""
     waypoints = np.array(config['waypoints'], dtype=float)
     traj_cfg = config.get('trajectory', {})
-    ctrl_cfg = config.get('controller', {})
 
     planned, smoothed, trajectory, costmap = build_trajectory_from_config(config)
-    traj_arrays = trajectory_to_arrays(trajectory)
-
-    controller = PurePursuitController(
-        lookahead_distance=ctrl_cfg.get('lookahead_distance', 0.3),
-        min_lookahead=ctrl_cfg.get('min_lookahead', 0.15),
-        max_lookahead=ctrl_cfg.get('max_lookahead', 0.6),
-        goal_tolerance=ctrl_cfg.get('goal_tolerance', 0.1),
-        max_linear_vel=traj_cfg.get('max_velocity', 0.22),
-        max_angular_vel=ctrl_cfg.get('max_angular_velocity', 2.84),
-    )
+    controller = create_controller(config)
 
     dt = traj_cfg.get('dt', 0.05)
     init_heading = math.atan2(
@@ -50,12 +39,10 @@ def simulate(config: dict) -> dict:
     tracking_errors = [0.0]
     sim_time = [0.0]
     t = 0.0
-    max_sim_time = traj_arrays['time'][-1] * 2
+    max_sim_time = trajectory.duration * 2
 
-    while not controller.goal_reached and t < max_sim_time:
-        cmd = controller.compute_command(
-            state, traj_arrays['x'], traj_arrays['y'], traj_arrays['velocity']
-        )
+    while not controller.goal_reached and not controller.faulted and t < max_sim_time:
+        cmd = controller.compute_command(state, trajectory, t)
         state.x += cmd.linear * math.cos(state.theta) * dt
         state.y += cmd.linear * math.sin(state.theta) * dt
         state.theta += cmd.angular * dt
@@ -67,16 +54,14 @@ def simulate(config: dict) -> dict:
         robot_theta.append(state.theta)
         sim_time.append(t)
 
-        dists = np.sqrt(
-            (traj_arrays['x'] - state.x)**2 + (traj_arrays['y'] - state.y)**2
-        )
+        dists = np.sqrt((trajectory.x - state.x)**2 + (trajectory.y - state.y)**2)
         tracking_errors.append(float(np.min(dists)))
 
     return {
         'waypoints': waypoints,
         'planned_path': planned,
         'smoothed_path': smoothed,
-        'trajectory': traj_arrays,
+        'trajectory': trajectory.to_dict(),
         'curvature': compute_path_curvature(smoothed),
         'costmap': costmap,
         'obstacles': config.get('obstacles', []),
@@ -85,6 +70,9 @@ def simulate(config: dict) -> dict:
         'robot_theta': np.array(robot_theta),
         'tracking_error': np.array(tracking_errors),
         'time': np.array(sim_time),
+        'goal_reached': controller.goal_reached,
+        'faulted': controller.faulted,
+        'controller_type': config.get('controller', {}).get('type', 'pure_pursuit'),
     }
 
 
@@ -106,7 +94,8 @@ def plot_results(results: dict):
         ax.add_patch(circle)
     ax.set_xlabel('X (m)')
     ax.set_ylabel('Y (m)')
-    ax.set_title('Path Comparison')
+    ctrl_label = results['controller_type'].replace('_', ' ').title()
+    ax.set_title(f'Path Comparison ({ctrl_label})')
     ax.legend()
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
@@ -150,10 +139,11 @@ def main():
 
     print('Running simulation...')
     results = simulate(config)
-    print(f'Simulation complete: {len(results["robot_x"])} steps, '
-          f'duration={results["time"][-1]:.1f}s')
-    print(f'Max tracking error: {np.max(results["tracking_error"]):.4f}m')
-    print(f'Mean tracking error: {np.mean(results["tracking_error"]):.4f}m')
+    status = 'Goal reached' if results['goal_reached'] else ('FAULTED' if results['faulted'] else 'Timeout')
+    print(f'{status} | {len(results["robot_x"])} steps, {results["time"][-1]:.1f}s')
+    print(f'Controller: {results["controller_type"]}')
+    print(f'Max error: {np.max(results["tracking_error"]):.4f}m')
+    print(f'Mean error: {np.mean(results["tracking_error"]):.4f}m')
     plot_results(results)
 
 

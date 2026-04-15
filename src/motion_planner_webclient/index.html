@@ -6,78 +6,147 @@
   <title>Motion Planner — Interactive Demo</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
     .container { display: flex; height: 100vh; }
-    .sidebar { width: 300px; padding: 20px; background: #16213e; overflow-y: auto; }
+
+    .sidebar {
+      width: 270px; padding: 20px; background: #fff;
+      display: flex; flex-direction: column; gap: 14px; overflow-y: auto;
+      border-right: 1px solid #e0e0e0; box-shadow: 2px 0 8px rgba(0,0,0,0.04);
+    }
+    .sidebar h1 { font-size: 1.15em; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
+    .sidebar h1 span { font-size: 1.4em; }
+
+    .tool-row { display: flex; gap: 6px; }
+    .tool-btn {
+      flex: 1; padding: 9px 12px; border: 2px solid #e0e0e0; background: #fff;
+      color: #666; border-radius: 8px; cursor: pointer; font-size: 0.82em; text-align: center;
+      transition: all 0.15s; font-weight: 500;
+    }
+    .tool-btn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .tool-btn:hover:not(.active) { border-color: #2563eb; color: #2563eb; }
+
+    .section { font-size: 0.7em; color: #999; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; font-weight: 600; }
+
+    .param-grid { display: grid; grid-template-columns: 1fr 72px; gap: 6px 10px; font-size: 0.82em; align-items: center; }
+    .param-grid label { color: #555; }
+    .param-grid input {
+      background: #f8f9fa; border: 1px solid #ddd; color: #333;
+      padding: 5px 8px; border-radius: 6px; text-align: right; font-size: 0.9em;
+    }
+    .param-grid input:focus { outline: none; border-color: #2563eb; }
+
+    .action-row { display: flex; gap: 6px; }
+    .run-btn {
+      flex: 2; padding: 11px; background: #2563eb; color: #fff; border: none;
+      border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9em;
+      transition: background 0.15s;
+    }
+    .run-btn:hover { background: #1d4ed8; }
+    .run-btn:disabled { background: #93b4f5; cursor: wait; }
+    .sm-btn {
+      flex: 1; padding: 11px; background: #f8f9fa; color: #666; border: 1px solid #ddd;
+      border-radius: 8px; cursor: pointer; font-size: 0.85em; font-weight: 500;
+      transition: all 0.15s;
+    }
+    .sm-btn:hover { border-color: #2563eb; color: #2563eb; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78em; color: #666; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    .status {
+      margin-top: auto; padding: 10px; background: #f8f9fa; border-radius: 8px;
+      font-size: 0.78em; font-family: 'SF Mono', 'Fira Code', monospace; min-height: 50px;
+      white-space: pre-wrap; color: #1a7f37; border: 1px solid #e0e0e0;
+    }
+
     .canvas-wrap { flex: 1; position: relative; }
     canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
-    h1 { font-size: 1.3em; margin-bottom: 10px; color: #e94560; }
-    h2 { font-size: 1em; margin: 15px 0 8px; color: #0f3460; background: #e94560; padding: 4px 8px; border-radius: 4px; }
-    .mode-btn { display: block; width: 100%; padding: 10px; margin: 4px 0; border: 2px solid #0f3460; background: #1a1a2e; color: #eee; border-radius: 6px; cursor: pointer; font-size: 0.9em; }
-    .mode-btn.active { background: #e94560; border-color: #e94560; }
-    .mode-btn:hover { border-color: #e94560; }
-    .param { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; font-size: 0.85em; }
-    .param input { width: 80px; background: #1a1a2e; border: 1px solid #0f3460; color: #eee; padding: 4px; border-radius: 4px; text-align: right; }
-    .action-btn { display: block; width: 100%; padding: 10px; margin: 6px 0; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: bold; }
-    .run-btn { background: #e94560; color: white; }
-    .clear-btn { background: #0f3460; color: white; }
-    .action-btn:hover { opacity: 0.85; }
-    .status { margin-top: 10px; padding: 10px; background: #1a1a2e; border-radius: 6px; font-size: 0.8em; min-height: 60px; font-family: monospace; white-space: pre-wrap; }
-    .legend { font-size: 0.8em; margin-top: 10px; }
-    .legend-item { display: flex; align-items: center; margin: 3px 0; }
-    .legend-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
-    .loading-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(26,26,46,0.9); display: flex; align-items: center; justify-content: center; font-size: 1.2em; z-index: 10; }
+    .plots-panel {
+      display: none; width: 320px; padding: 12px; background: #fff;
+      border-left: 1px solid #e0e0e0; flex-direction: column; gap: 8px; overflow-y: auto;
+    }
+    .plots-panel.visible { display: flex; }
+    .plots-panel h3 { font-size: 0.8em; color: #666; margin: 0; }
+    .plot-div { width: 100%; height: 200px; }
+    .loading-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(245,245,245,0.92); display: flex; align-items: center;
+      justify-content: center; font-size: 1.1em; z-index: 10; color: #2563eb;
+    }
     .loading-overlay.hidden { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="sidebar">
-      <h1>🤖 Motion Planner</h1>
-      <p style="font-size:0.8em; color:#888; margin-bottom:10px;">Click canvas to add waypoints/obstacles. Powered by Pyodide (Python in browser).</p>
+      <h1><span>🤖</span> Motion Planner</h1>
 
-      <h2>Mode</h2>
-      <button class="mode-btn active" data-mode="waypoint">📍 Add Waypoints</button>
-      <button class="mode-btn" data-mode="obstacle">🔴 Add Obstacles</button>
-
-      <h2>Obstacle Size</h2>
-      <div class="param"><span>Radius (m)</span><input id="obs-radius" type="number" value="0.3" step="0.05" min="0.1" max="1.0"></div>
-
-      <h2>Trajectory</h2>
-      <div class="param"><span>Max Velocity (m/s)</span><input id="max-vel" type="number" value="0.22" step="0.01"></div>
-      <div class="param"><span>Max Accel (m/s²)</span><input id="max-accel" type="number" value="0.5" step="0.1"></div>
-      <div class="param"><span>Smooth Samples</span><input id="num-samples" type="number" value="200" step="50"></div>
-      <div class="param"><span>Lookahead (m)</span><input id="lookahead" type="number" value="0.3" step="0.05"></div>
-
-      <h2>Actions</h2>
-      <button class="action-btn run-btn" id="run-btn">▶ Plan & Simulate</button>
-      <button class="action-btn clear-btn" id="clear-btn">✕ Clear All</button>
-      <button class="action-btn clear-btn" id="undo-btn">↩ Undo Last</button>
-
-      <h2>Legend</h2>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#e94560"></div>Waypoints</div>
-        <div class="legend-item"><div class="legend-dot" style="background:rgba(255,0,0,0.3)"></div>Obstacles</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#ff69b4"></div>Planned Path (A*)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>Smoothed Path</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#76ff03"></div>Robot Trajectory</div>
+      <div class="tool-row">
+        <button class="tool-btn active" data-mode="waypoint">📍 Waypoints</button>
+        <button class="tool-btn" data-mode="obstacle">🔴 Obstacles</button>
       </div>
 
-      <div class="status" id="status">Ready. Add at least 2 waypoints to start.</div>
+      <div class="section">Parameters</div>
+      <div class="param-grid">
+        <label>Controller</label>
+        <select id="ctrl-type" style="background:#f8f9fa;border:1px solid #ddd;color:#333;padding:4px;border-radius:4px;font-size:0.9em;">
+          <option value="pure_pursuit">Pure Pursuit</option>
+          <option value="pid">PID</option>
+          <option value="feedforward">Feedforward</option>
+        </select>
+        <label>Obstacle radius</label><input id="obs-radius" type="number" value="0.3" step="0.05" min="0.1">
+        <label>Max velocity</label><input id="max-vel" type="number" value="0.22" step="0.01">
+        <label>Max accel</label><input id="max-accel" type="number" value="0.5" step="0.1">
+      </div>
+      <div id="pp-params" class="param-grid">
+        <label>Lookahead</label><input id="lookahead" type="number" value="0.3" step="0.05">
+      </div>
+      <div id="pid-params" class="param-grid" style="display:none;">
+        <label>Kp lateral</label><input id="kp-lat" type="number" value="2.0" step="0.1">
+        <label>Kd lateral</label><input id="kd-lat" type="number" value="0.1" step="0.05">
+        <label>Kp longitudinal</label><input id="kp-lon" type="number" value="1.0" step="0.1">
+        <label>Max error (m)</label><input id="max-cte" type="number" value="0.5" step="0.1">
+      </div>
+
+      <div class="action-row">
+        <button class="run-btn" id="run-btn">▶ Plan & Simulate</button>
+        <button class="sm-btn" id="undo-btn">↩</button>
+        <button class="sm-btn" id="clear-btn">✕</button>
+      </div>
+
+      <div class="section">Legend</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div>Waypoints</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e879a0"></div>A* path</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div>Smoothed</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Robot</div>
+      </div>
+
+      <div class="status" id="status">Ready — click canvas to add waypoints.</div>
     </div>
 
     <div class="canvas-wrap">
-      <div class="loading-overlay" id="loading">Loading Pyodide + motion_planner_core...</div>
+      <div class="loading-overlay" id="loading">Loading Pyodide + NumPy + SciPy...</div>
       <canvas id="canvas"></canvas>
+    </div>
+    <div class="plots-panel" id="plots-panel">
+      <h3>Tracking Error</h3>
+      <div class="plot-div" id="error-plot"></div>
+      <h3>Velocity Profile</h3>
+      <div class="plot-div" id="vel-plot"></div>
     </div>
   </div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const status = document.getElementById('status');
-const loading = document.getElementById('loading');
+const statusEl = document.getElementById('status');
+const loadingEl = document.getElementById('loading');
+const runBtn = document.getElementById('run-btn');
 
 let mode = 'waypoint';
 let waypoints = [];
@@ -86,161 +155,230 @@ let results = null;
 let pyodide = null;
 let coreLoaded = false;
 
-// World bounds
+// Animation state
+let animating = false;
+let animFrame = 0;
+let animId = null;
+
 const WORLD = { xmin: -1, xmax: 9, ymin: -1, ymax: 5 };
 
 function resize() {
   canvas.width = canvas.parentElement.clientWidth;
   canvas.height = canvas.parentElement.clientHeight;
   draw();
+  if (results) drawPlots();
 }
 window.addEventListener('resize', resize);
 
-function worldToCanvas(wx, wy) {
-  const sx = (wx - WORLD.xmin) / (WORLD.xmax - WORLD.xmin) * canvas.width;
-  const sy = canvas.height - (wy - WORLD.ymin) / (WORLD.ymax - WORLD.ymin) * canvas.height;
-  return [sx, sy];
+function w2c(wx, wy) {
+  return [
+    (wx - WORLD.xmin) / (WORLD.xmax - WORLD.xmin) * canvas.width,
+    canvas.height - (wy - WORLD.ymin) / (WORLD.ymax - WORLD.ymin) * canvas.height
+  ];
 }
-
-function canvasToWorld(sx, sy) {
-  const wx = sx / canvas.width * (WORLD.xmax - WORLD.xmin) + WORLD.xmin;
-  const wy = (canvas.height - sy) / canvas.height * (WORLD.ymax - WORLD.ymin) + WORLD.ymin;
-  return [wx, wy];
+function c2w(sx, sy) {
+  return [
+    sx / canvas.width * (WORLD.xmax - WORLD.xmin) + WORLD.xmin,
+    (canvas.height - sy) / canvas.height * (WORLD.ymax - WORLD.ymin) + WORLD.ymin
+  ];
 }
-
-function worldToCanvasRadius(r) {
-  return r / (WORLD.xmax - WORLD.xmin) * canvas.width;
-}
+function w2cr(r) { return r / (WORLD.xmax - WORLD.xmin) * canvas.width; }
 
 function draw() {
-  ctx.fillStyle = '#0a0a1a';
+  ctx.fillStyle = '#f0f2f5';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Grid
-  ctx.strokeStyle = '#1a2a4a';
+  ctx.strokeStyle = '#dde1e6';
   ctx.lineWidth = 0.5;
   for (let x = Math.ceil(WORLD.xmin); x <= WORLD.xmax; x++) {
-    const [sx] = worldToCanvas(x, 0);
+    const [sx] = w2c(x, 0);
     ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.height); ctx.stroke();
   }
   for (let y = Math.ceil(WORLD.ymin); y <= WORLD.ymax; y++) {
-    const [, sy] = worldToCanvas(0, y);
+    const [, sy] = w2c(0, y);
     ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width, sy); ctx.stroke();
   }
 
   // Obstacles
   for (const obs of obstacles) {
-    const [sx, sy] = worldToCanvas(obs.x, obs.y);
-    const sr = worldToCanvasRadius(obs.r);
-    ctx.fillStyle = 'rgba(255, 50, 50, 0.25)';
-    ctx.strokeStyle = '#e94560';
-    ctx.lineWidth = 2;
+    const [sx, sy] = w2c(obs.x, obs.y);
+    const sr = w2cr(obs.r);
+    ctx.fillStyle = 'rgba(220, 50, 50, 0.12)';
+    ctx.strokeStyle = '#dc3545';
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
 
-  // Results
   if (results) {
-    // Planned path (A*)
-    if (results.planned && results.planned.length > 2) {
-      drawPath(results.planned, '#ff69b4', 1.5, true);
-    }
+    // A* planned path
+    if (results.planned && results.planned.length > 2)
+      drawPath(results.planned, '#e879a0', 1.5, [4, 4]);
     // Smoothed path
-    if (results.smoothed) drawPath(results.smoothed, '#4fc3f7', 2.5);
-    // Robot trajectory
-    if (results.robot) drawPath(results.robot, '#76ff03', 2, true);
+    if (results.smoothed)
+      drawPath(results.smoothed, '#2563eb', 2.5);
+    // Robot trail (up to current animation frame)
+    if (results.robot) {
+      const end = animating ? animFrame : results.robot.length;
+      drawPath(results.robot.slice(0, end), '#16a34a', 2);
+    }
   }
 
   // Waypoints
   for (let i = 0; i < waypoints.length; i++) {
-    const [sx, sy] = worldToCanvas(waypoints[i][0], waypoints[i][1]);
-    ctx.fillStyle = '#e94560';
-    ctx.beginPath(); ctx.arc(sx, sy, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(i, sx, sy + 3.5);
-    // Connect with dashed line
+    const [sx, sy] = w2c(waypoints[i][0], waypoints[i][1]);
     if (i > 0) {
-      const [px, py] = worldToCanvas(waypoints[i-1][0], waypoints[i-1][1]);
-      ctx.strokeStyle = 'rgba(233,69,96,0.3)';
+      const [px, py] = w2c(waypoints[i-1][0], waypoints[i-1][1]);
+      ctx.strokeStyle = 'rgba(37,99,235,0.2)';
       ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]);
+      ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
       ctx.setLineDash([]);
     }
+    ctx.fillStyle = '#2563eb';
+    ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(i, sx, sy + 3);
+  }
+
+  // Animated robot
+  if (results && results.robot && results.headings) {
+    const idx = animating ? Math.min(animFrame, results.robot.length - 1) : results.robot.length - 1;
+    if (idx >= 0) drawRobot(results.robot[idx], results.headings[idx]);
   }
 }
 
-function drawPath(points, color, width, dashed) {
+function drawRobot(pos, heading) {
+  const [sx, sy] = w2c(pos[0], pos[1]);
+  const size = w2cr(0.15);
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(-heading); // canvas y is flipped
+
+  // Body
+  ctx.fillStyle = 'rgba(22, 163, 74, 0.85)';
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.6, -size * 0.6);
+  ctx.lineTo(-size * 0.3, 0);
+  ctx.lineTo(-size * 0.6, size * 0.6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = '#15803d';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawPath(points, color, width, dash) {
   if (points.length < 2) return;
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
-  if (dashed) ctx.setLineDash([6, 4]);
+  if (dash) ctx.setLineDash(dash);
   ctx.beginPath();
-  const [sx, sy] = worldToCanvas(points[0][0], points[0][1]);
+  const [sx, sy] = w2c(points[0][0], points[0][1]);
   ctx.moveTo(sx, sy);
   for (let i = 1; i < points.length; i++) {
-    const [px, py] = worldToCanvas(points[i][0], points[i][1]);
+    const [px, py] = w2c(points[i][0], points[i][1]);
     ctx.lineTo(px, py);
   }
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
+function startAnimation() {
+  if (!results || !results.robot || results.robot.length < 2) return;
+  animating = true;
+  animFrame = 0;
+  const speed = 3; // frames per tick
+  function tick() {
+    animFrame += speed;
+    if (animFrame >= results.robot.length) {
+      animFrame = results.robot.length;
+      animating = false;
+      draw();
+      return;
+    }
+    draw();
+    animId = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function stopAnimation() {
+  animating = false;
+  if (animId) cancelAnimationFrame(animId);
+}
+
 canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
-  const [wx, wy] = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const [wx, wy] = c2w(e.clientX - rect.left, e.clientY - rect.top);
+  const rx = Math.round(wx * 100) / 100;
+  const ry = Math.round(wy * 100) / 100;
   if (mode === 'waypoint') {
-    waypoints.push([Math.round(wx * 100) / 100, Math.round(wy * 100) / 100]);
-    status.textContent = `Added waypoint ${waypoints.length - 1} at (${wx.toFixed(2)}, ${wy.toFixed(2)})`;
+    waypoints.push([rx, ry]);
+    statusEl.textContent = `Waypoint ${waypoints.length - 1}: (${rx}, ${ry})`;
   } else {
     const r = parseFloat(document.getElementById('obs-radius').value);
-    obstacles.push({ x: Math.round(wx * 100) / 100, y: Math.round(wy * 100) / 100, r });
-    status.textContent = `Added obstacle at (${wx.toFixed(2)}, ${wy.toFixed(2)}) r=${r}`;
+    obstacles.push({ x: rx, y: ry, r });
+    statusEl.textContent = `Obstacle at (${rx}, ${ry}) r=${r}`;
   }
+  stopAnimation();
   results = null;
   draw();
 });
 
-document.querySelectorAll('.mode-btn').forEach(btn => {
+document.querySelectorAll('.tool-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     mode = btn.dataset.mode;
   });
 });
 
+document.getElementById('ctrl-type').addEventListener('change', (e) => {
+  const v = e.target.value;
+  document.getElementById('pp-params').style.display = v === 'pure_pursuit' ? 'grid' : 'none';
+  document.getElementById('pid-params').style.display = v === 'pid' ? 'grid' : 'none';
+});
+
 document.getElementById('clear-btn').addEventListener('click', () => {
-  waypoints = []; obstacles = []; results = null;
-  status.textContent = 'Cleared.';
-  draw();
+  waypoints = []; obstacles = []; results = null; stopAnimation();
+  document.getElementById('plots-panel').classList.remove('visible');
+  statusEl.textContent = 'Cleared.'; draw();
 });
 
 document.getElementById('undo-btn').addEventListener('click', () => {
   if (mode === 'waypoint' && waypoints.length) waypoints.pop();
   else if (mode === 'obstacle' && obstacles.length) obstacles.pop();
-  results = null;
-  status.textContent = 'Undone.';
-  draw();
+  results = null; stopAnimation();
+  statusEl.textContent = 'Undone.'; draw();
 });
 
-document.getElementById('run-btn').addEventListener('click', runPipeline);
+runBtn.addEventListener('click', runPipeline);
 
 async function runPipeline() {
-  if (waypoints.length < 2) {
-    status.textContent = 'Need at least 2 waypoints!';
-    return;
-  }
-  if (!coreLoaded) {
-    status.textContent = 'Still loading Python... please wait.';
-    return;
-  }
+  if (waypoints.length < 2) { statusEl.textContent = 'Need at least 2 waypoints.'; return; }
+  if (!coreLoaded) { statusEl.textContent = 'Still loading...'; return; }
 
-  status.textContent = 'Running pipeline...';
+  stopAnimation();
+  runBtn.disabled = true;
+  runBtn.textContent = '⏳ Running...';
+  statusEl.textContent = 'Planning...';
+
   const maxVel = parseFloat(document.getElementById('max-vel').value);
   const maxAccel = parseFloat(document.getElementById('max-accel').value);
-  const numSamples = parseInt(document.getElementById('num-samples').value);
   const lookahead = parseFloat(document.getElementById('lookahead').value);
+  const ctrlType = document.getElementById('ctrl-type').value;
+  const kpLat = parseFloat(document.getElementById('kp-lat').value);
+  const kdLat = parseFloat(document.getElementById('kd-lat').value);
+  const kpLon = parseFloat(document.getElementById('kp-lon').value);
+  const maxCte = parseFloat(document.getElementById('max-cte').value);
 
   const wpJson = JSON.stringify(waypoints);
   const obsJson = JSON.stringify(obstacles.map(o => [o.x, o.y, o.r]));
@@ -250,86 +388,130 @@ import json, math
 import numpy as np
 from motion_planner_core.costmap import Costmap
 from motion_planner_core.pipeline import build_trajectory
-from motion_planner_core.trajectory_generator import trajectory_to_arrays
-from motion_planner_core.pure_pursuit import PurePursuitController, RobotState
+from motion_planner_core.controller import create_controller
+from motion_planner_core.types import RobotState
 
 wp = np.array(json.loads('${wpJson}'), dtype=float)
 obs_list = json.loads('${obsJson}')
-
 costmap = Costmap.from_obstacles(obs_list) if obs_list else None
 
 planned, smoothed, trajectory = build_trajectory(
-    wp, costmap,
-    num_smooth_samples=${numSamples},
-    max_vel=${maxVel},
-    max_accel=${maxAccel},
+    wp, costmap, num_smooth_samples=200,
+    max_vel=${maxVel}, max_accel=${maxAccel},
 )
-ta = trajectory_to_arrays(trajectory)
 
-# Simulate pure pursuit
-ctrl = PurePursuitController(lookahead_distance=${lookahead}, goal_tolerance=0.15, max_linear_vel=${maxVel})
+config = {
+    'controller': {
+        'type': '${ctrlType}',
+        'lookahead_distance': ${lookahead},
+        'goal_tolerance': 0.15,
+        'kp_lateral': ${kpLat},
+        'kd_lateral': ${kdLat},
+        'kp_longitudinal': ${kpLon},
+        'max_cross_track_error': ${maxCte},
+    },
+    'trajectory': {'max_velocity': ${maxVel}},
+}
+ctrl = create_controller(config)
+ctrl_name = '${ctrlType}'.replace('_', ' ').title()
+
 heading = math.atan2(wp[1,1]-wp[0,1], wp[1,0]-wp[0,0])
 state = RobotState(x=wp[0,0], y=wp[0,1], theta=heading)
 dt = 0.05
 robot = [[state.x, state.y]]
-for _ in range(8000):
-    cmd = ctrl.compute_command(state, ta['x'], ta['y'], ta['velocity'])
-    if ctrl.goal_reached: break
+headings = [state.theta]
+for step in range(8000):
+    t = step * dt
+    cmd = ctrl.compute_command(state, trajectory, t)
+    if ctrl.goal_reached or ctrl.faulted: break
     state.x += cmd.linear * math.cos(state.theta) * dt
     state.y += cmd.linear * math.sin(state.theta) * dt
     state.theta += cmd.angular * dt
     robot.append([state.x, state.y])
+    headings.append(state.theta)
 
-# Tracking error
 errors = []
 for rx, ry in robot:
-    d = np.sqrt((ta['x']-rx)**2 + (ta['y']-ry)**2)
+    d = np.sqrt((trajectory.x-rx)**2 + (trajectory.y-ry)**2)
     errors.append(float(np.min(d)))
 
 json.dumps({
     'planned': planned.tolist(),
     'smoothed': smoothed.tolist(),
     'robot': robot,
-    'duration': float(ta['time'][-1]),
+    'headings': headings,
+    'duration': float(trajectory.duration),
     'max_error': max(errors),
     'mean_error': sum(errors)/len(errors),
     'goal_reached': ctrl.goal_reached,
+    'faulted': ctrl.faulted,
+    'ctrl_name': ctrl_name,
+    'errors': errors,
+    'ref_vel': trajectory.velocity.tolist(),
+    'ref_time': trajectory.time.tolist(),
 })
   `);
 
   results = JSON.parse(resultJson);
-  const r = results;
-  status.textContent = [
-    r.goal_reached ? '✅ Goal reached!' : '⚠️ Did not converge',
-    `Duration: ${r.duration.toFixed(1)}s`,
-    `Max error: ${(r.max_error*100).toFixed(1)}cm`,
-    `Mean error: ${(r.mean_error*100).toFixed(1)}cm`,
-    `Robot steps: ${r.robot.length}`,
+  runBtn.disabled = false;
+  runBtn.textContent = '▶ Plan & Simulate';
+
+  statusEl.textContent = [
+    results.goal_reached ? 'Goal reached' : (results.faulted ? 'FAULTED (cross-track error)' : 'Did not converge'),
+    `Controller: ${results.ctrl_name}`,
+    `Time: ${results.duration.toFixed(1)}s  Steps: ${results.robot.length}`,
+    `Error -- max: ${(results.max_error*100).toFixed(1)}cm  mean: ${(results.mean_error*100).toFixed(1)}cm`,
   ].join('\n');
-  draw();
+
+  startAnimation();
+  drawPlots();
 }
 
-// Load Pyodide and our core library
+function drawPlots() {
+  if (!results || !results.errors) return;
+  const panel = document.getElementById('plots-panel');
+  panel.classList.add('visible');
+
+  const layout = {
+    margin: { t: 4, b: 28, l: 40, r: 8 },
+    font: { size: 10 },
+    xaxis: { title: '', gridcolor: '#eee' },
+    yaxis: { gridcolor: '#eee' },
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#fff',
+  };
+  const config = { displayModeBar: false, responsive: true };
+
+  const dt = results.duration / results.errors.length;
+  const errTime = results.errors.map((_, i) => (i * dt).toFixed(2));
+
+  Plotly.newPlot('error-plot', [{
+    x: errTime, y: results.errors,
+    type: 'scatter', mode: 'lines',
+    line: { color: '#dc3545', width: 1.5 },
+  }], { ...layout, yaxis: { ...layout.yaxis, title: 'm' } }, config);
+
+  const velTime = results.ref_time.map(t => t.toFixed(2));
+  Plotly.newPlot('vel-plot', [{
+    x: velTime, y: results.ref_vel,
+    type: 'scatter', mode: 'lines',
+    line: { color: '#2563eb', width: 1.5 },
+  }], { ...layout, yaxis: { ...layout.yaxis, title: 'm/s' } }, config);
+}
+
 async function init() {
   pyodide = await loadPyodide();
   await pyodide.loadPackage(['numpy', 'scipy']);
 
-  // Load motion_planner_core modules into Pyodide's filesystem
-  const modules = {
-    '__init__': `"""\nmotion_planner_core\n"""\n`,
-  };
+  const moduleNames = ['__init__', 'types', 'costmap', 'path_planner', 'path_smoother',
+    'trajectory_generator', 'controller', 'pure_pursuit', 'pid_controller',
+    'feedforward_controller', 'potential_field', 'pipeline'];
 
-  // Fetch each module
-  const moduleNames = ['costmap', 'path_planner', 'path_smoother', 'trajectory_generator', 'pure_pursuit', 'potential_field', 'pipeline'];
+  pyodide.FS.mkdir('/home/pyodide/motion_planner_core');
   for (const name of moduleNames) {
     const resp = await fetch(`core/${name}.py`);
-    modules[name] = await resp.text();
-  }
-
-  // Write to Pyodide filesystem
-  pyodide.FS.mkdir('/home/pyodide/motion_planner_core');
-  for (const [name, content] of Object.entries(modules)) {
-    pyodide.FS.writeFile(`/home/pyodide/motion_planner_core/${name}.py`, content);
+    const text = await resp.text();
+    pyodide.FS.writeFile(`/home/pyodide/motion_planner_core/${name}.py`, text);
   }
 
   await pyodide.runPythonAsync(`
@@ -339,9 +521,9 @@ import motion_planner_core
   `);
 
   coreLoaded = true;
-  loading.classList.add('hidden');
+  loadingEl.classList.add('hidden');
   resize();
-  status.textContent = 'Ready. Click to add waypoints, then hit Plan & Simulate.';
+  statusEl.textContent = 'Ready — click canvas to add waypoints.';
 }
 
 init();

@@ -9,7 +9,8 @@ from nav_msgs.msg import Path, Odometry
 from geometry_msgs.msg import Twist
 from std_msgs.msg import Float64MultiArray
 
-from motion_planner_core.pure_pursuit import PurePursuitController, RobotState
+from motion_planner_core.controller import create_controller
+from motion_planner_core.types import RobotState, Trajectory
 from motion_planner_core.potential_field import PotentialField, Obstacle
 
 
@@ -26,18 +27,10 @@ class ControllerNode(Node):
         with open(config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        ctrl_cfg = config.get('controller', {})
-        traj_cfg = config.get('trajectory', {})
+        self.controller = create_controller(config)
+        self.max_angular_vel = config.get('controller', {}).get('max_angular_velocity', 2.84)
+        self.start_time = None
 
-        self.controller = PurePursuitController(
-            lookahead_distance=ctrl_cfg.get('lookahead_distance', 0.3),
-            goal_tolerance=ctrl_cfg.get('goal_tolerance', 0.1),
-            max_linear_vel=traj_cfg.get('max_velocity', 0.22),
-            max_angular_vel=ctrl_cfg.get('max_angular_velocity', 2.84),
-        )
-        self.max_angular_vel = ctrl_cfg.get('max_angular_velocity', 2.84)
-
-        # Optional potential field safety net
         obs_cfg = config.get('obstacles', [])
         if obs_cfg:
             obstacles = [Obstacle(x=o[0], y=o[1], radius=o[2]) for o in obs_cfg]
@@ -50,28 +43,59 @@ class ControllerNode(Node):
         else:
             self.potential_field = None
 
-        self.traj_x = None
-        self.traj_y = None
-        self.traj_vel = None
+        self.trajectory = None
 
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.create_subscription(Path, '/trajectory', self._on_trajectory, 10)
         self.create_subscription(Float64MultiArray, '/trajectory_velocities', self._on_vel, 10)
         self.create_subscription(Odometry, '/odom', self._on_odom, 10)
 
+        # Temp storage until we have both path and velocities
+        self._traj_x = None
+        self._traj_y = None
+        self._traj_vel = None
+
         self.get_logger().info('Controller ready')
 
     def _on_trajectory(self, msg):
-        self.traj_x = np.array([p.pose.position.x for p in msg.poses])
-        self.traj_y = np.array([p.pose.position.y for p in msg.poses])
-        self.controller.reset()
+        self._traj_x = np.array([p.pose.position.x for p in msg.poses])
+        self._traj_y = np.array([p.pose.position.y for p in msg.poses])
+        headings = []
+        for p in msg.poses:
+            q = p.pose.orientation
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            headings.append(yaw)
+        self._traj_heading = np.array(headings)
+        self._build_trajectory()
 
     def _on_vel(self, msg):
-        self.traj_vel = np.array(msg.data)
+        self._traj_vel = np.array(msg.data)
+        self._build_trajectory()
+
+    def _build_trajectory(self):
+        if self._traj_x is None or self._traj_vel is None:
+            return
+        if len(self._traj_x) != len(self._traj_vel):
+            return
+        dt = 0.05
+        time = np.arange(len(self._traj_vel)) * dt
+        self.trajectory = Trajectory(
+            self._traj_x, self._traj_y, self._traj_heading,
+            self._traj_vel, time,
+        )
+        self.start_time = None
+        self.controller.reset()
+        self.get_logger().info(f'Trajectory loaded: {len(self.trajectory)} points')
 
     def _on_odom(self, msg):
-        if self.traj_x is None or self.traj_vel is None:
+        if self.trajectory is None:
             return
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self.start_time is None:
+            self.start_time = now
+        elapsed = now - self.start_time
 
         q = msg.pose.pose.orientation
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
@@ -83,7 +107,7 @@ class ControllerNode(Node):
             theta=yaw,
         )
 
-        cmd = self.controller.compute_command(state, self.traj_x, self.traj_y, self.traj_vel)
+        cmd = self.controller.compute_command(state, self.trajectory, elapsed)
         linear, angular = cmd.linear, cmd.angular
 
         if self.potential_field and not self.controller.goal_reached:
@@ -98,6 +122,8 @@ class ControllerNode(Node):
 
         if self.controller.goal_reached:
             self.get_logger().info('Goal reached!')
+        if self.controller.faulted:
+            self.get_logger().error('Controller faulted — cross-track error too large')
 
 
 def main(args=None):

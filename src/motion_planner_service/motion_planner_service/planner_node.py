@@ -1,8 +1,4 @@
-"""ROS2 node: plans path, smooths, generates trajectory, publishes everything.
-
-This is the main planning node. It reads config, runs the full core pipeline,
-and publishes results for the controller and visualization.
-"""
+"""ROS2 node: runs core pipeline, publishes paths and trajectory."""
 
 import math
 import numpy as np
@@ -14,7 +10,6 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Header, Float64MultiArray
 
 from motion_planner_core.pipeline import build_trajectory_from_config
-from motion_planner_core.trajectory_generator import trajectory_to_arrays
 
 
 class PlannerNode(Node):
@@ -31,12 +26,11 @@ class PlannerNode(Node):
             config = yaml.safe_load(f)
 
         planned, smoothed, trajectory, costmap = build_trajectory_from_config(config)
-        traj_arrays = trajectory_to_arrays(trajectory)
         waypoints = np.array(config['waypoints'], dtype=float)
 
         self.waypoints = waypoints
         self.smoothed = smoothed
-        self.traj_arrays = traj_arrays
+        self.trajectory = trajectory
 
         self.wp_pub = self.create_publisher(Path, '/raw_waypoints', 10)
         self.path_pub = self.create_publisher(Path, '/smoothed_path', 10)
@@ -45,7 +39,7 @@ class PlannerNode(Node):
 
         self.timer = self.create_timer(1.0, self._publish)
         self.get_logger().info(
-            f'Pipeline: {len(waypoints)} waypoints → {len(smoothed)} smoothed → '
+            f'Pipeline: {len(waypoints)} waypoints -> {len(smoothed)} smoothed -> '
             f'{len(trajectory)} trajectory points'
         )
 
@@ -55,13 +49,12 @@ class PlannerNode(Node):
 
         self.wp_pub.publish(self._make_path(self.waypoints, stamp, frame))
         self.path_pub.publish(self._make_path(self.smoothed, stamp, frame))
-        self.traj_pub.publish(self._make_path(
-            np.column_stack([self.traj_arrays['x'], self.traj_arrays['y']]),
-            stamp, frame, self.traj_arrays['heading'],
-        ))
+
+        traj_points = np.column_stack([self.trajectory.x, self.trajectory.y])
+        self.traj_pub.publish(self._make_path(traj_points, stamp, frame, self.trajectory.heading))
 
         vel_msg = Float64MultiArray()
-        vel_msg.data = self.traj_arrays['velocity'].tolist()
+        vel_msg.data = self.trajectory.velocity.tolist()
         self.vel_pub.publish(vel_msg)
 
     def _make_path(self, points, stamp, frame, headings=None):

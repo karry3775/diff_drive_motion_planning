@@ -82,7 +82,7 @@ class Costmap:
 
     @classmethod
     def from_obstacles(cls, obstacles: list, config: CostmapConfig = None,
-                       inflation_radius: float = 0.15) -> 'Costmap':
+                       inflation_radius: float = 0.3) -> 'Costmap':
         """Build from list of [x, y, radius] obstacles."""
         cfg = config or CostmapConfig()
         costmap = cls(cfg)
