@@ -25,6 +25,7 @@ setup(
             'path_smoother_node = trajectory_smoother.path_smoother_node:main',
             'trajectory_generator_node = trajectory_smoother.trajectory_generator_node:main',
             'pure_pursuit_node = trajectory_smoother.pure_pursuit_node:main',
+            'data_recorder_node = trajectory_smoother.data_recorder_node:main',
         ],
     },
 )

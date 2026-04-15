@@ -4,6 +4,7 @@ Launches:
   1. path_smoother_node — loads waypoints, publishes smoothed path
   2. trajectory_generator_node — generates time-parameterized trajectory
   3. pure_pursuit_node — tracks trajectory, publishes cmd_vel
+  4. data_recorder_node -- records data
 """
 
 import os
@@ -35,6 +36,13 @@ def generate_launch_description():
             package='trajectory_smoother',
             executable='pure_pursuit_node',
             name='pure_pursuit',
+            parameters=[{'config_file': config_file}],
+            output='screen',
+        ),
+        Node(
+            package='trajectory_smoother',
+            executable='data_recorder_node',
+            name='data_recorder',
             parameters=[{'config_file': config_file}],
             output='screen',
         ),
