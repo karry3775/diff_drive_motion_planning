@@ -85,13 +85,16 @@ class PurePursuitController:
             self._goal_reached = True
             return VelocityCommand(0.0, 0.0)
 
-        # Find the closest point on the trajectory (only search forward to avoid going backward)
-        search_start = self._last_closest_idx
+        # Find the closest point on the trajectory
+        # Allow some backward search to recover from obstacle avoidance deviations
+        search_start = max(0, self._last_closest_idx - 20)
         dx = trajectory_x[search_start:] - state.x
         dy = trajectory_y[search_start:] - state.y
         distances = np.sqrt(dx**2 + dy**2)
         closest_idx = search_start + int(np.argmin(distances))
-        self._last_closest_idx = closest_idx
+        # Only advance the index, never go backward more than the search window
+        if closest_idx >= self._last_closest_idx:
+            self._last_closest_idx = closest_idx
 
         # Find the lookahead point: first point ahead of closest that is >= lookahead_distance away
         all_dx = trajectory_x - state.x

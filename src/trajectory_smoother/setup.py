@@ -12,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.rviz')),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
     ],
     install_requires=['setuptools', 'numpy', 'scipy'],
@@ -26,6 +27,7 @@ setup(
             'trajectory_generator_node = trajectory_smoother.trajectory_generator_node:main',
             'pure_pursuit_node = trajectory_smoother.pure_pursuit_node:main',
             'data_recorder_node = trajectory_smoother.data_recorder_node:main',
+            'obstacle_spawner_node = trajectory_smoother.obstacle_spawner_node:main'
         ],
     },
 )

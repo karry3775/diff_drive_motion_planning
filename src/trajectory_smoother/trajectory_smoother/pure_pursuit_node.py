@@ -1,7 +1,8 @@
-"""ROS2 node for Pure Pursuit trajectory tracking.
+"""ROS2 node for Pure Pursuit trajectory tracking with obstacle avoidance.
 
 Subscribes to the trajectory and robot odometry, computes velocity
-commands using the Pure Pursuit controller, and publishes cmd_vel.
+commands using the Pure Pursuit controller, optionally adjusts them
+with potential field obstacle avoidance, and publishes cmd_vel.
 """
 
 import rclpy
@@ -14,6 +15,7 @@ import math
 import yaml
 
 from trajectory_smoother.pure_pursuit import PurePursuitController, RobotState
+from trajectory_smoother.potential_field import PotentialField, Obstacle
 
 
 class PurePursuitNode(Node):
@@ -41,6 +43,21 @@ class PurePursuitNode(Node):
             max_linear_vel=traj_cfg.get('max_velocity', 0.22),
             max_angular_vel=ctrl_cfg.get('max_angular_velocity', 2.84),
         )
+        self.max_angular_vel = ctrl_cfg.get('max_angular_velocity', 2.84)
+
+        # Load obstacles for potential field avoidance
+        obs_cfg = config.get('obstacles', [])
+        if obs_cfg:
+            obstacles = [Obstacle(x=o[0], y=o[1], radius=o[2]) for o in obs_cfg]
+            pf_cfg = config.get('potential_field', {})
+            self.potential_field = PotentialField(
+                obstacles=obstacles,
+                influence_distance=pf_cfg.get('influence_distance', 0.5),
+                repulsive_gain=pf_cfg.get('repulsive_gain', 0.5),
+            )
+            self.get_logger().info(f'Loaded {len(obstacles)} obstacles for avoidance')
+        else:
+            self.potential_field = None
 
         self.traj_x = None
         self.traj_y = None
@@ -84,9 +101,20 @@ class PurePursuitNode(Node):
             state, self.traj_x, self.traj_y, self.traj_vel
         )
 
+        linear = cmd.linear
+        angular = cmd.angular
+
+        # Apply potential field obstacle avoidance if configured
+        if self.potential_field is not None and not self.controller.goal_reached:
+            linear, angular = self.potential_field.adjust_velocity(
+                state.x, state.y, state.theta,
+                linear, angular,
+                max_angular=self.max_angular_vel,
+            )
+
         twist = Twist()
-        twist.linear.x = cmd.linear
-        twist.angular.z = cmd.angular
+        twist.linear.x = linear
+        twist.angular.z = angular
         self.cmd_pub.publish(twist)
 
         if self.controller.goal_reached:

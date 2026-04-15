@@ -4,7 +4,7 @@ Launches:
   1. path_smoother_node — loads waypoints, publishes smoothed path
   2. trajectory_generator_node — generates time-parameterized trajectory
   3. pure_pursuit_node — tracks trajectory, publishes cmd_vel
-  4. data_recorder_node -- records data
+  4. data_recorder_node — records odom, saves plots on goal reached
 """
 
 import os
@@ -18,6 +18,13 @@ def generate_launch_description():
     config_file = os.path.join(pkg_dir, 'config', 'waypoints.yaml')
 
     return LaunchDescription([
+        Node(
+            package='trajectory_smoother',
+            executable='obstacle_spawner_node',
+            name='obstacle_spawner',
+            parameters=[{'config_file': config_file}],
+            output='screen',
+        ),
         Node(
             package='trajectory_smoother',
             executable='path_smoother_node',

@@ -1,5 +1,5 @@
-"""
-ROS2 node that records robot odometry and trajectory data during execution.
+"""ROS2 node that records robot odometry and trajectory data during execution.
+
 Subscribes to /odom, /smoothed_path, /raw_waypoints, and /trajectory_velocities.
 When the robot reaches the goal (or on shutdown), saves plots to simulation_results.png.
 """
@@ -51,6 +51,9 @@ class DataRecorderNode(Node):
             Float64MultiArray, '/trajectory_velocities', self._on_vel, 10
         )
 
+        # Publish robot trail for live RViz visualization
+        self.trail_pub = self.create_publisher(Path, '/robot_trail', 10)
+
         self.get_logger().info('Data recorder started — will save plots on goal or shutdown')
 
     def _on_odom(self, msg: Odometry):
@@ -69,6 +72,19 @@ class DataRecorderNode(Node):
         self.robot_y.append(msg.pose.pose.position.y)
         self.robot_theta.append(yaw)
         self.robot_time.append(now - self.start_time)
+
+        # Publish live robot trail for RViz
+        from geometry_msgs.msg import PoseStamped
+        from std_msgs.msg import Header
+        trail_msg = Path()
+        trail_msg.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='odom')
+        for i in range(len(self.robot_x)):
+            pose = PoseStamped()
+            pose.header = trail_msg.header
+            pose.pose.position.x = self.robot_x[i]
+            pose.pose.position.y = self.robot_y[i]
+            trail_msg.poses.append(pose)
+        self.trail_pub.publish(trail_msg)
 
         # Check goal
         dist = math.hypot(msg.pose.pose.position.x - self.goal_x,
@@ -183,6 +199,13 @@ class DataRecorderNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = DataRecorderNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if not node.goal_reached and len(node.robot_x) > 10:
+            node.get_logger().info('Shutdown — saving plots with data collected so far')
+            node._save_plots()
+        node.destroy_node()
+        rclpy.shutdown()

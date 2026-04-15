@@ -31,3 +31,14 @@ controller:
   goal_tolerance: 0.1       # meters — stop when this close to final waypoint
   max_angular_velocity: 2.84  # rad/s (TurtleBot3 Burger max)
   linear_gain: 1.0          # Proportional gain on linear velocity
+
+# Obstacles for potential field avoidance [x, y, radius] in meters
+# Comment out or remove this section to disable obstacle avoidance
+obstacles:
+  - [2.5, 1.2, 0.3]
+  - [4.5, 2.2, 0.25]
+
+# Potential field parameters
+potential_field:
+  influence_distance: 0.6   # meters — how far away obstacles start repelling
+  repulsive_gain: 0.3       # strength of repulsion (keep gentle to avoid spinning)
